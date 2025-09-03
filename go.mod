@@ -12,7 +12,7 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	go.uber.org/zap v1.27.0
-	golang.org/x/text v0.19.0
+	golang.org/x/text v0.28.0
 	golang.org/x/time v0.7.0
 	gopkg.in/ini.v1 v1.67.0
 	gorm.io/driver/postgres v1.5.9
