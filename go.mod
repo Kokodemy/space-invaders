@@ -10,7 +10,7 @@ require (
 	github.com/gin-contrib/gzip v1.2.3
 	github.com/gin-contrib/zap v1.1.5
 	github.com/gin-gonic/gin v1.11.0
-	github.com/golang-jwt/jwt/v5 v5.2.1
+	github.com/golang-jwt/jwt/v5 v5.3.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/text v0.27.0
 	golang.org/x/time v0.7.0
