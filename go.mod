@@ -16,7 +16,7 @@ require (
 	golang.org/x/time v0.7.0
 	gopkg.in/ini.v1 v1.67.0
 	gorm.io/driver/postgres v1.5.9
-	gorm.io/gorm v1.25.12
+	gorm.io/gorm v1.31.0
 )
 
 require (
