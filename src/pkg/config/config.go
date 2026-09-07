@@ -99,6 +99,7 @@ type config struct {
 		Regenerate                *bool
 		SpecialtyLikeliness       float64
 		StrafeAmplitude           float64
+		TypeProgressStep          int
 		Width                     float64
 		YetAgainAmplifier         float64
 
@@ -296,25 +297,29 @@ type config struct {
 	}
 
 	Spaceship struct {
-		Acceleration           float64
-		AdmiralDamageAmplifier int
-		BoostDuration          time.Duration
-		BoostScaleSizeFactor   float64
-		CannonProgress         int
-		Cooldown               time.Duration
-		DamageDuration         time.Duration
-		Drag                   float64
-		ExperienceScaler       float64
-		FreezeDuration         time.Duration
-		Height                 float64
-		HijackDuration         time.Duration
-		MaximumCannons         int
-		MaximumLabelLength     int
-		MaximumSpeed           float64
-		MinimumSpeed           float64
-		PointerOffsetFactor    float64
-		ShieldChargeDuration   time.Duration
-		Width                  float64
+		Acceleration               float64
+		AdmiralDamageAmplifier     int
+		BoostDuration              time.Duration
+		BoostScaleSizeFactor       float64
+		CannonProgress             int
+		Cooldown                   time.Duration
+		DamageDuration             time.Duration
+		Drag                       float64
+		ExperienceBase             int
+		ExperienceScaler           float64
+		FreezeDuration             time.Duration
+		Height                     float64
+		HijackDuration             time.Duration
+		MaximumCannons             int
+		MaximumLabelLength         int
+		MaximumPenaltyRatio        float64
+		MaximumSpeed               float64
+		MaximumStateDurationFactor float64
+		MinimumSpeed               float64
+		PointerOffsetFactor        float64
+		ShieldChargeDuration       time.Duration
+		StateImmunityDuration      time.Duration
+		Width                      float64
 	}
 
 	Star struct {

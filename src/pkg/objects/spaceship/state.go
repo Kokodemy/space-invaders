@@ -1,6 +1,7 @@
 package spaceship
 
 import (
+	"slices"
 	"time"
 
 	"github.com/sarumaj/edu-space-invaders/src/pkg/config"
@@ -21,14 +22,15 @@ type SpaceshipState int
 
 // AnyOf returns true if the spaceship state is any of the given states.
 func (state SpaceshipState) AnyOf(states ...SpaceshipState) bool {
-	for _, s := range states {
-		if state == s {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(states, state)
 }
+
+// Disabling reports whether the state takes control of the spaceship away from
+// the player, either by refusing input outright or by turning it against them.
+// These are the states that read as the game having stopped responding, so they
+// are the ones that are capped, given a grace period afterwards and drawn on the
+// hull.
+func (state SpaceshipState) Disabling() bool { return state.AnyOf(Frozen, Hijacked) }
 
 // GetColor returns the color of the spaceship based on its state.
 func (state SpaceshipState) GetColor() graphics.Color {

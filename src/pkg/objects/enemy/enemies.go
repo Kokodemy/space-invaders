@@ -12,8 +12,8 @@ type Enemies []Enemy
 // The new enemy is created with the specified name and random Y position.
 // The new enemy is placed at the highest level of the existing enemies.
 // The new enemy is turned into a goodie and berserk based on the probabilities.
-func (enemies *Enemies) AppendNew(name string, randomY bool) {
-	enemies.AppendScaled(name, randomY, enemies.HighestProgress(), enemies.HighestType())
+func (enemies *Enemies) AppendNew(name string, randomY bool, ceiling EnemyType) {
+	enemies.AppendScaled(name, randomY, enemies.HighestProgress(), enemies.HighestType(), ceiling)
 }
 
 // AppendScaled appends a new enemy scaled against the given progress and
@@ -22,11 +22,11 @@ func (enemies *Enemies) AppendNew(name string, randomY bool) {
 // otherwise be scaled against only the enemies already copied across, making a
 // kill early in the list worth a weaker replacement than the same kill late in
 // it.
-func (enemies *Enemies) AppendScaled(name string, randomY bool, progress int, ancestor EnemyType) {
+func (enemies *Enemies) AppendScaled(name string, randomY bool, progress int, ancestor, ceiling EnemyType) {
 	newEnemy := Challenge(name, randomY)
 	newEnemy.ToProgressLevel(progress)
 	newEnemy.Surprise(Tank, Cloaked, Freezer)
-	newEnemy.BerserkGivenAncestor(ancestor)
+	newEnemy.BerserkGivenAncestor(ancestor, ceiling)
 
 	*enemies = append(*enemies, *newEnemy)
 }
@@ -76,7 +76,8 @@ func (enemies Enemies) GetHighestProperty(property func(Enemy) numeric.Number) n
 // The enemies are regenerated when the spaceship reaches the bottom of the screen.
 // The new enemies are placed at the highest level of the existing enemies.
 // The new enemies are turned into a goodie and berserk based on the probabilities.
-func (enemies *Enemies) Update(spaceshipPosition numeric.Position, scale numeric.Number) {
+// The ceiling is the most dangerous type the roster may field, from MaximumType.
+func (enemies *Enemies) Update(spaceshipPosition numeric.Position, scale numeric.Number, ceiling EnemyType) {
 	canvasDimensions := config.CanvasBoundingBox()
 
 	// Measured over the whole fleet before it is rebuilt, so that a replacement
@@ -89,7 +90,7 @@ func (enemies *Enemies) Update(spaceshipPosition numeric.Position, scale numeric
 		enemy := &(*enemies)[i]
 		if enemy.Level.HitPoints <= 0 {
 			if *config.Config.Enemy.Regenerate {
-				visibleEnemies.AppendScaled("", false, highestProgress, highestType)
+				visibleEnemies.AppendScaled("", false, highestProgress, highestType, ceiling)
 			}
 
 			continue
@@ -101,7 +102,7 @@ func (enemies *Enemies) Update(spaceshipPosition numeric.Position, scale numeric
 			newEnemy := Challenge(enemy.Name, false)
 			newEnemy.ToProgressLevel(enemy.Level.Progress)
 			newEnemy.Surprise(Tank, Cloaked, Freezer)
-			newEnemy.BerserkGivenAncestor(highestType)
+			newEnemy.BerserkGivenAncestor(highestType, ceiling)
 			*enemy = *newEnemy
 		}
 

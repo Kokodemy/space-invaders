@@ -99,8 +99,23 @@ func (lvl SpaceshipLevel) ExperienceRatio() float64 {
 }
 
 // GetRequiredExperience returns the required experience for the spaceship.
+//
+// The exponential term alone rounded to 1 for the first fourteen levels, so a
+// single kill of a level one enemy — worth three experience — handed out three
+// levels at once, and the opening minutes advanced faster than the player could
+// read. The base is what a level costs before that term takes over; the scaler
+// is what stops it from running away, since the same curve reached sixty-seven
+// thousand experience for one level at progress four hundred, against a gain
+// that grows roughly linearly.
 func (lvl SpaceshipLevel) GetRequiredExperience() int {
-	return (numeric.E.Pow(numeric.Number(lvl.Progress) / numeric.Number(config.Config.Spaceship.ExperienceScaler))).Int()
+	required := (numeric.Number(config.Config.Spaceship.ExperienceBase) *
+		numeric.E.Pow(numeric.Number(lvl.Progress)/numeric.Number(config.Config.Spaceship.ExperienceScaler))).Int()
+
+	if required < 1 { // A level always costs something, whatever the configuration says.
+		return 1
+	}
+
+	return required
 }
 
 // Up increases the spaceship level.

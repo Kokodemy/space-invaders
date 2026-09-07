@@ -49,7 +49,7 @@ func Explode(num int) Stars {
 	cell := numeric.Locate(width/numeric.Number(columns), height/numeric.Number(rows))
 
 	stars := make(Stars, 0, num)
-	for i := 0; i < num; i++ {
+	for i := range num {
 		col, row := numeric.Number(i%columns), numeric.Number(i/columns)
 
 		stars = append(stars, *Twinkle(numeric.Locate(

@@ -52,7 +52,8 @@ type wreckage struct {
 // applyGravityOnEnemies applies gravity to the enemies.
 // It applies gravity to the enemies, each enemy trapped in the planet's gravity is increasing the planet's mass.
 // If the planet is a black hole, it pulls the enemies away, if the spaceship is not within the range of the planet.
-func (h *handler) applyGravityOnEnemies() {
+// The scale is how far the frame advanced the simulation, expressed in nominal frames.
+func (h *handler) applyGravityOnEnemies(scale numeric.Number) {
 	// Apply gravity to the enemies, each enemy trapped in the planet's gravity is increasing the planet's mass.
 	// If the planet is a black hole, it repels the enemies away, if the spaceship is not within the range of the planet,
 	// to mimic some kind of a intelligent behavior (as if the enemies were trying to avoid the black hole).
@@ -72,6 +73,7 @@ func (h *handler) applyGravityOnEnemies() {
 			e.Area(),
 			true,  // Increase the planet's mass
 			repel, // Repel the enemies away or not
+			scale,
 		).Sub(e.Geometry.Size().Half().ToVector()))
 
 		// Shrink the enemy if it is within range of the black hole.
@@ -103,14 +105,16 @@ func (h *handler) applyGravityOnEnemies() {
 // It applies gravity to the spaceship.
 // The spaceship's mass should not increase the planet's mass.
 // If the planet is a black hole or a supernova, it applies gravity to the bullets.
-func (h *handler) applyGravityOnSpaceship() {
+// The scale is how far the frame advanced the simulation, expressed in nominal frames.
+func (h *handler) applyGravityOnSpaceship(scale numeric.Number) {
 	// Apply gravity to the spaceship.
 	// The spaceship's mass should not increase the planet's mass.
 	h.spaceship.Geometry.SetPosition(h.planet.ApplyGravity(
 		h.spaceship.Geometry.Position().Add(h.spaceship.Geometry.Size().Half().ToVector()),
-		h.spaceship.Area(),
+		h.spaceship.GravitationalMass(),
 		false, // Do not increase the planet's mass
 		false, // Do not reverse the gravity
+		scale,
 	).Sub(h.spaceship.Geometry.Size().Half().ToVector()))
 
 	// Correct the spaceship's position if it is out of the canvas.
@@ -124,6 +128,7 @@ func (h *handler) applyGravityOnSpaceship() {
 				numeric.Number(config.Config.Bullet.Weight)*bullet.Area(),
 				false, // Do not increase the planet's mass
 				false, // Do not reverse the gravity
+				scale,
 			)
 
 			// Calculate skew based on the angle of the velocity vector
@@ -178,9 +183,10 @@ func (h *handler) applyGravityOnSpaceship() {
 // If a freezer is within range of the sun, it unfreezes the freezer.
 // If the anomaly is a black hole, it sucks in the bullets and other objects.
 // If the anomaly is a supernova, it distorts the bullets and other objects and disables the freezers.
-func (h *handler) applyPlanetImpact() {
-	defer h.applyGravityOnEnemies()
-	defer h.applyGravityOnSpaceship()
+// The scale is how far the frame advanced the simulation, expressed in nominal frames.
+func (h *handler) applyPlanetImpact(scale numeric.Number) {
+	defer h.applyGravityOnEnemies(scale)
+	defer h.applyGravityOnSpaceship(scale)
 
 	message := config.Execute(
 		config.Config.MessageBox.Messages.PlanetImpactsSystem,
@@ -257,7 +263,7 @@ func (h *handler) applyPlanetImpact() {
 					planet.Mercury: config.Config.Planet.Impact.Mercury.BerserkLikelinessAmplifier,
 					planet.Mars:    config.Config.Planet.Impact.Mars.BerserkLikelinessAmplifier,
 				}[h.planet.Type])).Clamp(0, 1)
-				h.enemies[i].Berserk()
+				h.enemies[i].Berserk(h.enemyCeiling())
 			}
 
 			config.SendMessage(message, false, false)
@@ -271,7 +277,7 @@ func (h *handler) applyPlanetImpact() {
 					numeric.Number(config.Config.Planet.Impact.Pluto.SpecialFoeLikelinessAmplifier)).Clamp(0, 1)
 				h.enemies[i].Level.BerserkLikeliness = (e.Level.BerserkLikeliness *
 					numeric.Number(config.Config.Planet.Impact.Pluto.BerserkLikelinessAmplifier)).Clamp(0, 1)
-				h.enemies[i].Berserk()
+				h.enemies[i].Berserk(h.enemyCeiling())
 				h.enemies[i].Surprise(enemy.Freezer, enemy.Cloaked)
 			}
 
@@ -892,7 +898,7 @@ func (h *handler) refresh(scale numeric.Number) {
 	}
 
 	// Update the positions of the enemies.
-	h.enemies.Update(h.spaceship.Geometry.Position(), scale)
+	h.enemies.Update(h.spaceship.Geometry.Position(), scale, h.enemyCeiling())
 
 	// Update the position of the planet.
 	h.planet.Update(h.spaceship.Level.AccelerateRate * numeric.Number(config.Config.Planet.SpeedRatio) * scale)
@@ -911,7 +917,7 @@ func (h *handler) refresh(scale numeric.Number) {
 	h.fireEnemyCannons()
 
 	// Apply the impact of the planet on the system.
-	h.applyPlanetImpact()
+	h.applyPlanetImpact(scale)
 
 	// Check the collisions.
 	h.checkCollisions()
@@ -1111,13 +1117,21 @@ func (h *handler) Await() {
 	go config.StopAudio("theme_heroic.wav")
 }
 
+// enemyCeiling returns the most dangerous type the roster may field right now,
+// which follows the spaceship's progress rather than how long the game has run.
+func (h *handler) enemyCeiling() enemy.EnemyType {
+	return enemy.MaximumType(h.spaceship.Level.Progress)
+}
+
 // GenerateEnemy generates a new enemy with the specified name and random Y position.
-func (h *handler) GenerateEnemy(name string, randomY bool) { h.enemies.AppendNew(name, randomY) }
+func (h *handler) GenerateEnemy(name string, randomY bool) {
+	h.enemies.AppendNew(name, randomY, h.enemyCeiling())
+}
 
 // GenerateEnemies generates the specified number of enemies with random Y position.
 func (h *handler) GenerateEnemies(num int, randomY bool) {
 	for i := 0; i < num; i++ {
-		h.enemies.AppendNew("", randomY)
+		h.enemies.AppendNew("", randomY, h.enemyCeiling())
 	}
 }
 

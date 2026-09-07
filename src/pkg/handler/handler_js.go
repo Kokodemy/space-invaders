@@ -159,8 +159,19 @@ func (h *handler) registerEventHandlers() {
 		config.GlobalSet("mousedown", globalMouseEvent.mouseDown(h.mouseEvent))
 		config.GlobalSet("mousemove", globalMouseEvent.mouseMove(h.mouseEvent))
 		config.GlobalSet("mouseup", globalMouseEvent.mouseUp(h.mouseEvent))
-		config.AddEventListenerToCanvas("contextmenu", config.GlobalGet("mousedown"))
 		config.AddEventListenerToCanvas("mousedown", config.GlobalGet("mousedown"))
+		// The context menu is only suppressed here, never acted on. Routing it
+		// into the mouse handler meant its button decided what happened: a
+		// keyboard-invoked menu reports button 0, which registered as a primary
+		// press that no mouseup ever released, and a long press on a touch screen
+		// raises the same event, which paused the game and dropped the finger the
+		// player was still holding. The real mousedown fires first and already
+		// pauses on the secondary button, so nothing is lost.
+		config.GlobalSet("contextmenu", js.FuncOf(func(_ js.Value, p []js.Value) any {
+			p[0].Call("preventDefault")
+			return nil
+		}))
+		config.AddEventListenerToCanvas("contextmenu", config.GlobalGet("contextmenu"))
 		config.AddEventListenerToCanvas("mousemove", config.GlobalGet("mousemove"))
 		config.AddEventListenerToCanvas("mouseup", config.GlobalGet("mouseup"))
 		// Releasing the button outside the canvas delivers no mouseup to it, so
@@ -222,7 +233,7 @@ func (known registeredKeys) keyUp(rcv chan<- keyEvent) js.Func {
 	})
 }
 
-// mouseDown is a method that listens to the mousedown or contextmenu event.
+// mouseDown is a method that listens to the mousedown event.
 func (event *mouseEvent) mouseDown(rcv chan<- mouseEvent) js.Func {
 	return js.FuncOf(func(_ js.Value, p []js.Value) any {
 		p[0].Call("preventDefault")

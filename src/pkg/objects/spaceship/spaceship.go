@@ -29,7 +29,9 @@ type Spaceship struct {
 	thrusting           bool                       // Thrusting is true if the spaceship accelerated during the current frame
 	coasting            bool                       // Coasting is true while the spaceship is bleeding off speed with the throttle closed
 	lastFired           time.Time                  // Last time the spaceship fired
-	lastStateTransition time.Time                  // Last time the spaceship changed state
+	lastStateTransition time.Time                  // Last time the spaceship entered or had its state prolonged
+	stateEntered        time.Time                  // Last time the spaceship actually entered its current state, ignoring prolongations
+	immuneUntil         time.Time                  // No state that takes control away may be applied before this moment
 	lastDiscovery       time.Time                  // Last time the spaceship discovered a planet
 	discoveredPlanets   map[planet.PlanetType]bool // Discovered planets
 }
@@ -66,6 +68,26 @@ func (spaceship Spaceship) Area() numeric.Number {
 		return numeric.GetSpaceshipVerticesV2(spaceship.Geometry.Position(), spaceship.Geometry.Size(), true).Vertices().Area()
 	}
 	return spaceship.Geometry.Size().Area()
+}
+
+// GravitationalMass returns the mass a planet pulls the spaceship by.
+// It is the hull area with the scaling the current state applies divided back
+// out. The boost makes the hull half again as long, so its area — and with it
+// the pull of every planet — was 2.25 times greater while boosted: the reward
+// for ramming a tank quietly made the map harder to fly, hardest of all near the
+// bodies that pull the strongest. Collision and repulsion keep using the real
+// area, because there the larger hull is the point.
+//
+// The shrinking the black hole applies is deliberately not divided out. It goes
+// through the geometry rather than through the state, and how it drags a
+// dwindling hull around is a property of the anomaly, not of the boost.
+func (spaceship Spaceship) GravitationalMass() numeric.Number {
+	scale := spaceship.state.GetScale()
+	if scale <= 0 {
+		return spaceship.Area()
+	}
+
+	return spaceship.Area() / scale.Pow(2)
 }
 
 // ApplyRepulsion applies repulsion to the spaceship and the enemy.
@@ -112,10 +134,30 @@ func (spaceship *Spaceship) ApplyRepulsion(e enemy.Enemy) numeric.Position {
 // and its size is doubled. If the number of cannons exceeds
 // the maximum number of cannons, it is set to the maximum number.
 func (spaceship *Spaceship) ChangeState(state SpaceshipState) {
-	spaceship.lastStateTransition = time.Now()
-	if spaceship.state == state {
+	now := time.Now()
+
+	// A state that takes control away is refused for as long as the grace period
+	// left by the previous one runs, so that the player gets a chance to fly clear
+	// before the next freezer or cloaked enemy can take the controls again.
+	if state.Disabling() && now.Before(spaceship.immuneUntil) {
 		return
 	}
+
+	if spaceship.state == state {
+		// Prolonging a disabling state is measured against the moment it was
+		// entered rather than the last prolongation. A frozen spaceship can
+		// neither move nor shoot, so every further freezer reaching it used to
+		// restart the timer on a player with no way to break the chain, and the
+		// lock-out could run indefinitely.
+		if state.Disabling() && now.Sub(spaceship.stateEntered) >= spaceship.maximumStateDuration() {
+			return
+		}
+
+		spaceship.lastStateTransition = now
+		return
+	}
+
+	spaceship.lastStateTransition, spaceship.stateEntered = now, now
 
 	switch state {
 	case Boosted:
@@ -143,6 +185,20 @@ func (spaceship *Spaceship) ChangeState(state SpaceshipState) {
 		go config.PlayAudio("spaceship_crash.wav", false)
 
 	}
+}
+
+// maximumStateDuration returns how long the current state may run in total,
+// however often it is prolonged.
+func (spaceship Spaceship) maximumStateDuration() time.Duration {
+	return time.Duration(float64(spaceship.state.GetDuration()) *
+		config.Config.Spaceship.MaximumStateDurationFactor)
+}
+
+// overstayed reports whether a state that takes control away has run for as long
+// as it is allowed to, counting from when it was entered.
+func (spaceship Spaceship) overstayed() bool {
+	return spaceship.state.Disabling() &&
+		time.Since(spaceship.stateEntered) >= spaceship.maximumStateDuration()
 }
 
 // DetectCollision checks if the spaceship has collided with an enemy.
@@ -223,7 +279,7 @@ func (spaceship *Spaceship) Discovered() []string {
 // If the control to draw the spaceship discovery progress bar is enabled, the spaceship is drawn with the discovery progress bar.
 // If the control to draw the spaceship shield is enabled, the spaceship is drawn with the shield.
 // The scale is how far the frame advanced the simulation, expressed in nominal
-// frames; it paces the colour and size transitions.
+// frames. It paces the color and size transitions.
 func (spaceship *Spaceship) Draw(scale numeric.Number) {
 	var label string
 	if config.Config.Control.DrawObjectLabels.Get() {
@@ -248,6 +304,17 @@ func (spaceship *Spaceship) Draw(scale numeric.Number) {
 		statusColors = append(statusColors, "rgba(0, 0, 240, 0.8)") // Blue
 	}
 
+	// A state that takes the controls away is shown draining on the hull itself.
+	// The only cue used to be the hull color and a throttled line in the message
+	// box, neither of which says how long it lasts, so losing control read as the
+	// game having stopped responding rather than as something an enemy did.
+	if spaceship.state.Disabling() {
+		if remaining := spaceship.stateRemaining(); remaining > 0 {
+			statusValues = append(statusValues, remaining.Float())
+			statusColors = append(statusColors, spaceship.state.GetColor().FormatRGBA())
+		}
+	}
+
 	spaceship.Color.Interpolate(scale)
 	spaceship.Geometry.Interpolate(scale)
 	config.DrawSpaceship(
@@ -259,6 +326,22 @@ func (spaceship *Spaceship) Draw(scale numeric.Number) {
 		statusValues,
 		statusColors,
 	)
+}
+
+// stateRemaining returns how much of the current state is left to run, from 1
+// down to 0, taking the prolongation cap into account.
+func (spaceship Spaceship) stateRemaining() numeric.Number {
+	duration := spaceship.state.GetDuration()
+	if duration <= 0 {
+		return 0
+	}
+
+	left := duration - time.Since(spaceship.lastStateTransition)
+	if capped := spaceship.maximumStateDuration() - time.Since(spaceship.stateEntered); capped < left {
+		left = capped
+	}
+
+	return numeric.Number(float64(left)/float64(duration)).Clamp(0, 1)
 }
 
 // Fire fires bullets from the spaceship.
@@ -442,7 +525,12 @@ func (spaceship *Spaceship) MoveTo(target numeric.Position, scale numeric.Number
 	// Keep the spaceship clear of the pointer that is steering it. On a touch
 	// screen the finger sits exactly where the spaceship is asked to go, so
 	// without the offset the player's own hand covers the thing being aimed.
-	target = target.Sub(numeric.Locate(0, spaceship.Geometry.Size().Height*numeric.Number(config.Config.Spaceship.PointerOffsetFactor)))
+	//
+	// The offset is measured against the configured hull height, not the current
+	// one: taken from the live height it grew with the boost, so the spaceship
+	// slid 24 pixels further from the finger when the boost started and back when
+	// it ended, twice per boost, under the thumb steering it.
+	target = target.Sub(numeric.Locate(0, config.Config.Spaceship.Height*config.Config.Spaceship.PointerOffsetFactor))
 
 	// The heading is what the pointer is asking for; the distance is how much of
 	// it is left to cover.
@@ -503,6 +591,20 @@ func (spaceship *Spaceship) Penalize(levels int) bool {
 		return false
 	}
 
+	// A single collision may not cost more than a share of what has been earned.
+	// The heavy end of the roster carries penalties in the hundreds — an Overlord
+	// is worth 216 levels — so one touch ended a long run outright, taking the
+	// shield's whole capacity down with it. The cap keeps the heavies frightening
+	// without making them instant.
+	//
+	// Below the progress where the share rounds to nothing the penalty is left
+	// alone: a spaceship on its last level is meant to be destroyed by the hit.
+	if maximum := (numeric.Number(spaceship.Level.Progress) *
+		numeric.Number(config.Config.Spaceship.MaximumPenaltyRatio)).Int(); maximum >= 1 && levels > maximum {
+
+		levels = maximum
+	}
+
 	spaceship.Color.SetColor(Damaged.GetColor()).SetTransitionEnd(func(ct *graphics.ColorTransition) {
 		ct.SetColor(spaceship.state.GetColor())
 	})
@@ -523,6 +625,12 @@ func (spaceship *Spaceship) Penalize(levels int) bool {
 // it is set to 1. If the spaceship is Frozen or Damaged, the spaceship's
 // state is set to Neutral.
 func (spaceship *Spaceship) ResetState() {
+	// Leaving a state that took control away opens the grace period ChangeState
+	// checks, whether it ended on its own, was capped, or was lifted by the sun.
+	if spaceship.state.Disabling() {
+		spaceship.immuneUntil = time.Now().Add(config.Config.Spaceship.StateImmunityDuration)
+	}
+
 	switch spaceship.state {
 	case Boosted:
 		spaceship.Color.SetColor(Neutral.GetColor())
@@ -555,7 +663,9 @@ func (spaceship Spaceship) String() string {
 func (spaceship *Spaceship) UpdateState(scale numeric.Number) {
 	spaceship.Decelerate(scale)
 
-	if time.Since(spaceship.lastStateTransition) < spaceship.state.GetDuration() {
+	if time.Since(spaceship.lastStateTransition) < spaceship.state.GetDuration() &&
+		!spaceship.overstayed() {
+
 		return
 	}
 
