@@ -71,6 +71,18 @@ func (enemyType EnemyType) GetBehavior() Behavior {
 	return b
 }
 
+// MaximumType returns the most dangerous type the roster may field against a
+// spaceship at the given progress.
+func MaximumType(progress int) EnemyType {
+	step := config.Config.Enemy.TypeProgressStep
+	if step < 1 { // Not configured to hold anything back.
+		return Overlord
+	}
+
+	return EnemyType(numeric.Number(int(Berserker)+progress/step).
+		Clamp(numeric.Number(Berserker), numeric.Number(Overlord)).Int())
+}
+
 // AnyOf returns true if the enemy type is any of the given types.
 func (enemyType EnemyType) AnyOf(types ...EnemyType) bool {
 	for _, typ := range types {

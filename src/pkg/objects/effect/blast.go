@@ -12,7 +12,7 @@ type Blast struct {
 	Position numeric.Position // Centre of the blast.
 	Radius   numeric.Number   // Radius of the object that died.
 	Style    string           // Which animation to play, one of the config.Blast constants.
-	Color    string           // Colour of the object that died, so the kill stays attributable.
+	Color    string           // Color of the object that died, so the kill stays attributable.
 	Seed     numeric.Number   // Rotates the debris, so two blasts of the same style do not look alike.
 
 	age  numeric.Number // How many nominal frames the blast has been running.

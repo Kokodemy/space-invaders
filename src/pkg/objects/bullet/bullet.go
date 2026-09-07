@@ -15,7 +15,7 @@ type Bullet struct {
 	Speed       numeric.Number   // Speed and damage of the bullet
 	Damage      int              // Damage is the amount of health points the bullet takes from the enemy
 	Skew        numeric.Number   // Skew of the bullet
-	Heading     numeric.Number   // Heading is -1 for a bullet travelling up the screen and +1 for one travelling down
+	Heading     numeric.Number   // Heading is -1 for a bullet traveling up the screen and +1 for one traveling down
 	Exhausted   bool             // Exhausted is true if the bullet is out of the screen or has hit an enemy
 	repelVector numeric.Position // Repel vector of the bullet
 }

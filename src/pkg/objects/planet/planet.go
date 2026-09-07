@@ -38,8 +38,16 @@ func (planet *Planet) Again() {
 // The center is the center of the object that the planet is attracting.
 // The mass is the mass of the object that the planet is attracting.
 // The additionalMass flag indicates whether the mass should contribute persistently to the planet's gravitational force.
+// The scale is how far the frame advanced the simulation, expressed in nominal
+// frames.
 // The function returns the new position of the point after applying the gravitational force.
-func (planet *Planet) ApplyGravity(center numeric.Position, mass numeric.Number, additionalMass, reverse bool) numeric.Position {
+//
+// The pull is a displacement, not an acceleration, so it has to be scaled by the
+// frame: unscaled it was applied once per frame regardless of how long the frame
+// lasted, which made every planet pull about 2.4 times harder on a 144 Hz
+// display than on a 60 Hz one. A black hole that is escapable at one refresh
+// rate and fatal at another is not a difficulty setting anybody chose.
+func (planet *Planet) ApplyGravity(center numeric.Position, mass numeric.Number, additionalMass, reverse bool, scale numeric.Number) numeric.Position {
 	// Compute the distance between the planet and the point
 	delta := planet.Position.Sub(center)
 	distance := delta.Magnitude()
@@ -72,7 +80,11 @@ func (planet *Planet) ApplyGravity(center numeric.Position, mass numeric.Number,
 		fieldStrength *= -1
 	}
 
-	// Ensure that fieldStrength does not exceed the distance
+	fieldStrength *= scale
+
+	// Ensure that fieldStrength does not exceed the distance. The clamp comes
+	// after the frame scale, so that a long frame still cannot carry the object
+	// past the centre it is being pulled towards.
 	if fieldStrength > distance {
 		fieldStrength = distance // Clamp the movement to exactly reach the planet's position
 	}

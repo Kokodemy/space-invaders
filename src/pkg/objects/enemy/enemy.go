@@ -57,7 +57,17 @@ func (enemy Enemy) Area() numeric.Number {
 // If the enemy is a normal enemy, it has a chance to become a berserker.
 // If the enemy is a berserker, it has a chance to become an annihilator.
 // If the enemy is an annihilator, it increases its size, health points and defense.
-func (enemy *Enemy) Berserk() {
+// The ceiling is the most dangerous type the roster may field, from MaximumType.
+func (enemy *Enemy) Berserk(ceiling EnemyType) {
+	// Already as dangerous as the spaceship's progress allows. An enemy that sits
+	// above the ceiling — because the spaceship lost levels after it berserked —
+	// is not demoted, but it stops here too: repeating a type it already holds is
+	// what YetAgainAmplifier turns into a threefold boost to its statistics, and
+	// that is escalation as much as the promotion is.
+	if next := enemy.kind.Next(); next > ceiling {
+		return
+	}
+
 	if !numeric.SampleUniform(enemy.Level.BerserkLikeliness) {
 		return
 	}
@@ -68,17 +78,17 @@ func (enemy *Enemy) Berserk() {
 
 // BerserkGivenAncestor increases the chance of the enemy to become a berserker or an annihilator
 // by repeating the berserk for the new enemy given the enemy type of the ancestor.
-func (enemy *Enemy) BerserkGivenAncestor(oldType EnemyType) {
-	enemy.Berserk()
+func (enemy *Enemy) BerserkGivenAncestor(oldType, ceiling EnemyType) {
+	enemy.Berserk(ceiling)
 	switch oldType {
 
 	case Overlord, Bulwark, Leviathan, Colossus, Behemoth, Dreadnought, Juggernaut, Annihilator, Berserker:
 		for i := oldType; i >= Berserker; i-- {
-			enemy.Berserk()
+			enemy.Berserk(ceiling)
 		}
 
 	default:
-		enemy.Berserk()
+		enemy.Berserk(ceiling)
 
 	}
 }
@@ -114,7 +124,7 @@ func (enemy *Enemy) Destroy() {
 // If the control to draw object labels is enabled, the name of the enemy is drawn.
 // If the control to draw enemy hitpoint bars is enabled, the hitpoint bar is drawn.
 // The scale is how far the frame advanced the simulation, expressed in nominal
-// frames; it paces the colour and size transitions.
+// frames; it paces the color and size transitions.
 func (enemy *Enemy) Draw(scale numeric.Number) {
 	var label string
 	if config.Config.Control.DrawObjectLabels.Get() {
@@ -176,10 +186,10 @@ func (enemy *Enemy) FadeFlash(scale numeric.Number) {
 // IsDestroyed returns true if the enemy is destroyed.
 func (enemy Enemy) IsDestroyed() bool { return enemy.Level.HitPoints <= 0 }
 
-// Move moves the enemy according to the behaviour of its type.
+// Move moves the enemy according to the behavior of its type.
 // The scale is how far the frame advances the simulation, expressed in nominal
 // frames. Every type used to run the same homing chase, so the twelve names in
-// the roster were only ever a difference in statistics; the behaviours below are
+// the roster were only ever a difference in statistics; the behaviors below are
 // what makes them read differently in play.
 func (enemy *Enemy) Move(spaceshipPosition numeric.Position, scale numeric.Number) {
 	enemy.phase += numeric.Number(config.Config.Enemy.PhaseRate) * scale
@@ -247,10 +257,6 @@ func (enemy *Enemy) Move(spaceshipPosition numeric.Position, scale numeric.Numbe
 
 // FireCannon reports whether the enemy shoots at the spaceship on this frame and,
 // if so, the position its bullet starts from and the damage it carries.
-//
-// The bullet itself is created by the caller: the bullet package needs the enemy
-// package to resolve collisions, so an enemy cannot hold its own bullets without
-// forming an import cycle.
 func (enemy *Enemy) FireCannon() (numeric.Position, int, bool) {
 	if !enemy.kind.Armed() || time.Since(enemy.lastFired) < config.Config.Enemy.FireCooldown {
 		return numeric.Position{}, 0, false
